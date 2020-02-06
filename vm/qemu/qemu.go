@@ -76,6 +76,8 @@ type Config struct {
 	Snapshot bool `json:"snapshot"`
 	// Magic key used to dongle macOS to the device.
 	AppleSmcOsk string `json:"apple_smc_osk"`
+	// Where to store the logs
+	LogsPath string `json:"logs_path"`
 }
 
 type Pool struct {
@@ -451,6 +453,18 @@ func (inst *instance) boot() error {
 	var tee io.Writer
 	if inst.debug {
 		tee = os.Stdout
+	} else {
+		var err error
+		var logFileName = filepath.Join(inst.workdir, "log")
+		if inst.cfg.LogsPath != "" {
+			var instance = filepath.Base(inst.workdir)
+			logFileName = fmt.Sprintf("%s-log", instance)
+			logFileName = filepath.Join(inst.cfg.LogsPath, logFileName)
+		}
+		tee, err = os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
 	}
 	inst.merger = vmimpl.NewOutputMerger(tee)
 	inst.merger.Add("qemu", inst.rpipe)
@@ -689,7 +703,7 @@ func (inst *instance) Run(timeout time.Duration, stop <-chan bool, command strin
 	} else {
 		args = []string{"ssh"}
 		args = append(args, sshArgs...)
-		args = append(args, inst.sshuser+"@localhost", "cd "+inst.targetDir()+" && "+command)
+		args = append(args, inst.sshuser+"@localhost", "cd "+inst.targetDir()+" && cat /sys/kernel/debug/kdfsan/post_boot && "+command)
 	}
 	if inst.debug {
 		log.Logf(0, "running command: %#v", args)
